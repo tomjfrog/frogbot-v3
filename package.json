@@ -1,0 +1,16 @@
+{
+  "name": "frogbot-v3-lab",
+  "version": "1.0.0",
+  "description": "Vulnerable sample app for demoing Frogbot v3 scans.",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "lodash": "4.17.4",
+    "express": "4.16.0",
+    "minimist": "1.2.0",
+    "axios": "0.21.0"
+  }
+}

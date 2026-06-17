@@ -1,0 +1,25 @@
+- params:
+    git:
+      repoName: frogbot-v3
+      branches:
+        - main
+      aggregateFixes: true
+    scan:
+      minSeverity: "Medium"
+      fixableOnly: true
+      failOnSecurityIssues: true
+      disableJas: false              # enables SAST / Secrets / IaC / Contextual Analysis
+      sastChangedFilesOnly: true
+      allowedLicenses:
+        - MIT
+        - Apache-2.0
+        - BSD-2-Clause
+        - BSD-3-Clause
+      projects:
+        - workingDirs:
+            - "."
+          installCommand: "npm install"
+    jfrogPlatform:
+      watches:
+        - frogbot-watch
+      # jfrogProjectKey: "demo"      # uncomment if scoping to a JFrog Project
