@@ -21,5 +21,5 @@
           installCommand: "npm install"
     jfrogPlatform:
       watches:
-        - frogbot-watch
+        - frogbot-v3-watch
       # jfrogProjectKey: "demo"      # uncomment if scoping to a JFrog Project
