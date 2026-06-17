@@ -6,7 +6,7 @@
       aggregateFixes: true
     scan:
       minSeverity: "Medium"
-      fixableOnly: true
+      fixableOnly: false
       failOnSecurityIssues: true
       disableJas: false              # enables SAST / Secrets / IaC / Contextual Analysis
       sastChangedFilesOnly: true
