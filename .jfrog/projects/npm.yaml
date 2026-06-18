@@ -2,4 +2,3 @@ version: 1
 type: npm
 resolver:
     repo: npmjs-remote
-    serverId: tomjfrog
