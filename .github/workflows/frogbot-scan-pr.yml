@@ -5,19 +5,26 @@ on:
 permissions:
   pull-requests: write
   contents: read
+  id-token: write
+  # security-events: write  # enable with §8 GitHub Advanced Security stub
 jobs:
   scan-pull-request:
     runs-on: ubuntu-latest
     # Protected GitHub Environment with required reviewers.
-    # Frogbot enforces this for public repos using pull_request_target
-    # so forked-PR runs can't exfiltrate the JFrog token.
+    # Required for public repos using pull_request_target.
     environment: frogbot
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - uses: jfrog/frogbot@v3
         env:
-          JF_URL: ${{ secrets.JF_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+          JF_URL: ${{ vars.JF_URL }}
           JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JF_FAIL: "TRUE"
           JF_MIN_SEVERITY: "Medium"
           JF_INCLUDE_ALL_VULNERABILITIES: "FALSE"
+        with:
+          # Must match OIDC Provider Name on tomjpd
+          oidc-provider-name: frogbot-demo

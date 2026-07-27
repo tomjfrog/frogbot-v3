@@ -3,24 +3,36 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 0 * * *"   # daily at 00:00 UTC
+  push:
+    branches:
+      - main
 permissions:
   contents: write
   pull-requests: write
-  security-events: write  # required for Code Scanning SARIF upload
+  id-token: write
+  # security-events: write  # enable with §8 GitHub Advanced Security stub
 jobs:
   scan-repository:
     runs-on: ubuntu-latest
+    name: Scan Repository (${{ matrix.branch }} branch)
     strategy:
       matrix:
         branch: ["main"]
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
       - uses: jfrog/frogbot@v3
         env:
           JF_URL: ${{ vars.JF_URL }}
-          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
           JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JF_GIT_BASE_BRANCH: ${{ matrix.branch }}
           JF_GIT_AGGREGATE_FIXES: "TRUE"
-          JF_FIXABLE_ONLY: "FALSE"
-          JF_UPLOAD_SBOM_TO_VCS: "TRUE"
-          JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS: "TRUE"
+          JF_FIXABLE_ONLY: "TRUE"
+          # §8 GHAS stub (leave unset unless GitHub Advanced Security is available):
+          # JF_UPLOAD_SBOM_TO_VCS: "TRUE"
+          # JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS: "TRUE"
+        with:
+          # Must match OIDC Provider Name on tomjpd
+          oidc-provider-name: frogbot-demo
