@@ -10,7 +10,7 @@ permissions:
   contents: write
   pull-requests: write
   id-token: write
-  # security-events: write  # enable with §8 GitHub Advanced Security stub
+  security-events: write
 jobs:
   scan-repository:
     runs-on: ubuntu-latest
