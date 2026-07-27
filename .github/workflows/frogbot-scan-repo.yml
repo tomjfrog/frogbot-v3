@@ -35,4 +35,4 @@ jobs:
           # JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS: "TRUE"
         with:
           # Must match OIDC Provider Name on tomjpd
-          oidc-provider-name: frogbot-demo
+          oidc-provider-name: github-oidc-integration

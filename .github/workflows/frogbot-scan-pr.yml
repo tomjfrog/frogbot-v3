@@ -27,4 +27,4 @@ jobs:
           JF_INCLUDE_ALL_VULNERABILITIES: "FALSE"
         with:
           # Must match OIDC Provider Name on tomjpd
-          oidc-provider-name: frogbot-demo
+          oidc-provider-name: github-oidc-integration
