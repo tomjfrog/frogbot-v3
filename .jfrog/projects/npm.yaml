@@ -2,4 +2,4 @@ version: 1
 type: npm
 resolver:
     repo: npm-remote
-    serverId: tomjpd
+    serverId: tomjpd2

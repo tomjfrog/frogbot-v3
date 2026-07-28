@@ -2,7 +2,7 @@
 
 Customer-facing **awareness / entrypoint** demo of [Frogbot V3](https://docs.jfrog.com/security/docs/frogbot) on GitHub Actions + **`tomjpd`**.
 
-Built from [SPEC.md](SPEC.md). Six live moments (M1–M6); GitHub Advanced Security UI is stubbed only (see below).
+Built from [SPEC.md](SPEC.md). Live SE walkthrough: [DEMO_GUIDE.md](DEMO_GUIDE.md). Six live moments (M1–M6); Code Scanning setup in [SPEC.md §8](SPEC.md#8-github-code-scanning--security-tab).
 
 The `package.json` pins known-vulnerable versions of `lodash`, `express`, `minimist`, `axios`, `moment`, and `handlebars`. **`package-lock.json` must be generated via `jf npm` against `tomjpd`** (see below) so SCA does not resolve through the corporate Package Traffic Controller / `jfrogrepo24`.
 
@@ -117,6 +117,8 @@ Open either workflow: `id-token: write`, `oidc-provider-name: frogbot-demo`, `JF
 | `demo-plants/oss-snippet.js` | OSS snippet plant (M5) |
 | `demo-plants/fake-secrets.js` | Inactive fake secret (M5) |
 | `SPEC.md` | Full specification + docs links |
+| `DEMO_GUIDE.md` | SE live demo walkthrough (setup + each moment) |
+| `ISSUES.md` | Known Platform / Watch hang + workarounds |
 
 ---
 
@@ -131,20 +133,20 @@ Open either workflow: `id-token: write`, `oidc-provider-name: frogbot-demo`, `JF
 
 ---
 
-## 6. Future: GitHub Advanced Security (stub)
+## 6. GitHub Code Scanning / Security tab
 
-Not part of the live acceptance path. If the org has GitHub Advanced Security + JAS:
+Required so Frogbot SARIF appears under **Security → Code scanning**:
 
-1. Enable Code scanning and Dependency graph on the repo.
-2. On the repo-scan workflow, uncomment `security-events: write` and set:
-   - `JF_UPLOAD_SBOM_TO_VCS: "TRUE"`
-   - optionally `JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS: "TRUE"`
-3. After a repo scan, show **Security → Code scanning** and **Insights → Dependency graph**.
+1. Add `security-events: write` under `permissions:` on **both** workflows.
+2. Repo **Settings → Actions → General**: enable **Allow GitHub Actions to create and approve pull requests** (also required for autofix PRs).
+3. After a green repo scan, confirm Code scanning alerts and no `403 Resource not accessible by integration` in the Action log.
 
-Keep Platform Scans List as the primary SBOM story.
+Optional: `JF_UPLOAD_SBOM_TO_VCS` / `JF_UPLOAD_PR_SECURITY_RESULTS_TO_VCS` for Dependency Graph / PR SARIF. Full steps: [SPEC.md §8](SPEC.md#8-github-code-scanning--security-tab).
+
+Known Platform issue (repo scan hang / Watch violations): see [ISSUES.md](ISSUES.md).
 
 ---
 
 ## 7. Docs
 
-See [SPEC.md §11](SPEC.md#11-reference-documentation) for the full Frogbot documentation URL list used to build this lab.
+See [SPEC.md §11](SPEC.md#11-reference-documentation) for the full Frogbot documentation URL list used to build this lab. Operational issues (Xray indexing hang, Watch workaround): [ISSUES.md](ISSUES.md).
