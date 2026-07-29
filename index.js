@@ -2,13 +2,14 @@ const express = require("express");
 const _ = require("lodash");
 const moment = require("moment");
 const Handlebars = require("handlebars");
+const jwt = require("jsonwebtoken");
 
 // DEMO plants (scanned by Frogbot; not required for the HTTP routes below)
 require("./demo-plants/fake-secrets");
 require("./demo-plants/oss-snippet");
 
 // Contextual Analysis contrast (M3):
-// APPLICABLE — lodash / moment / handlebars are called on request paths below.
+// APPLICABLE — lodash / moment / handlebars / jsonwebtoken are called on request paths below.
 // NOT APPLICABLE — `axios` and `minimist` are declared in package.json but never required
 // or invoked here, so related CVEs should show as not applicable (or equivalent).
 
@@ -34,6 +35,17 @@ app.get("/date", (req, res) => {
 app.get("/render", (req, res) => {
   const template = Handlebars.compile(req.query.tpl || "Hello {{name}}");
   res.send(template({ name: "world" }));
+});
+
+// DEMO PR plant: jsonwebtoken 8.5.1 — High (XRAY-412392 / XRAY-412375)
+// jwt.verify() without algorithms can default to "none" → signature bypass — APPLICABLE
+app.get("/verify", (req, res) => {
+  try {
+    const payload = jwt.verify(req.query.token || "", "demo-secret");
+    res.json(payload);
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
 });
 
 app.listen(3000, () => console.log("listening on :3000"));
