@@ -1,10 +1,10 @@
 # Frogbot V3 — Live Demo Guide
 
-SE-facing walkthrough for this lab. Spec and acceptance criteria live in [SPEC.md](SPEC.md). Setup quirks and the Xray Watch hang are in [ISSUES.md](ISSUES.md). Short README overview: [README.md](README.md).
+SE-facing walkthrough for this lab. Spec and acceptance criteria live in [SPEC.md](SPEC.md). Historical Platform hang notes: [ISSUES.md](ISSUES.md). Short README overview: [README.md](README.md).
 
 **Audience:** customer evaluating Frogbot + Xray + JAS on GitHub Actions.  
 **Target time:** 15–25 minutes live.  
-**Platform:** `https://tomjpd.jfrog.io`  
+**Platform:** `https://tomjpd2.jfrog.io` (current lab JPD; older notes referring to `tomjpd` are historical)  
 **Repo:** this GitHub repo (`frogbot-v3`), workflows pin `jfrog/frogbot@v3`.
 
 ---
@@ -16,8 +16,8 @@ Frogbot shifts security left **inside the developer’s existing GitHub workflow
 | Moment | One-line story |
 | --- | --- |
 | **M6** | Auth to JFrog is **OIDC** — no long-lived Platform token in GitHub secrets. |
-| **M1** | A risky PR gets a Frogbot comment and a **failed check** (diff-only new issues). |
-| **M3** | Contextual Analysis separates **reachable** vulns from declared-but-unused noise. |
+| **M1** | A risky PR gets a Frogbot comment and a **failed required check** that **blocks merge**. |
+| **M3** | Contextual Analysis marks the new CVE **Applicable** when the call site matches the exploit shape — and still contrasts declared-but-unused noise. |
 | **M2** | A full **repo scan** opens autofix PR(s) to upgrade vulnerable dependencies. |
 | **M4** | Scan results + **SBOM** land in the JFrog Platform Scans List. |
 | **M5** | Planted **OSS snippet** and **inactive fake secret** show up; secret validation says not live. |
@@ -30,8 +30,9 @@ Optional secondary surface (not a §2 acceptance moment): GitHub **Security → 
 Customer opens a PR  ──►  frogbot-scan-pr.yml   (pull_request_target)
                             OIDC → JFrog token
                             Diff scan → PR comment + fail check
+                            Branch protection requires "scan-pull-request"
 
-SE runs repo scan    ──►  frogbot-scan-repo.yml  (workflow_dispatch / push / cron)
+SE runs repo scan    ──►  frogbot-scan-repo.yml  (workflow_dispatch / cron)
                             OIDC → JFrog token
                             Full scan → autofix PR(s) + Platform Scans List
 ```
@@ -39,22 +40,28 @@ SE runs repo scan    ──►  frogbot-scan-repo.yml  (workflow_dispatch / push
 **PR scan** answers: “What did *this change* introduce?”  
 **Repo scan** answers: “What’s already on the branch?” and can open fix PRs.
 
+**Merge gate (lab-hardened):** Xray policy `frogbot-demo-medium-and-above` has **`fail_pull_request: { active: true }`**. Frogbot V3 fails the PR job only when that policy action is set on a violation (not merely because `JF_FAIL=TRUE`). GitHub **branch protection on `main`** requires the check named **`scan-pull-request`**, so a red Frogbot job blocks merge.
+
 ---
 
 ## 2. Lab inventory (what’s already planted)
 
 | Asset | Role in the demo |
 | --- | --- |
-| `package.json` | Pins vulnerable: `lodash@4.17.4`, `express@4.16.0`, `minimist@1.2.0`, `axios@0.21.0`, `moment@2.18.1`, `handlebars@4.0.11` |
-| `package-lock.json` | Must resolve via `tomjpd` / `npm-remote` (never bare `npm install` on a PTC machine) |
-| `index.js` | **Applicable** call sites: lodash `merge`/`template`, moment parse, Handlebars `compile` |
+| `package.json` (on `main`) | Pins vulnerable: `lodash@4.17.4`, `express@4.16.0`, `minimist@1.2.0`, `axios@0.21.0`, `moment@2.18.1`, `handlebars@4.0.11` |
+| `package-lock.json` | Must resolve via **`tomjpd2`** / `npm-remote` (never bare `npm install` on a PTC machine) |
+| `index.js` (on `main`) | **Applicable** call sites: lodash `merge`/`template`, moment parse, Handlebars `compile` |
 | `axios` / `minimist` | Declared in `package.json` but **never required** → Contextual Analysis **not applicable** contrast |
 | `demo-plants/oss-snippet.js` | Copied `ms` package logic (not a dependency) → snippet detection |
 | `demo-plants/fake-secrets.js` | Fake `ghp_…` PAT (all zeros) → Secrets + dynamic validation **inactive** |
-| `.github/workflows/frogbot-scan-pr.yml` | PR gate; `JF_FAIL: "TRUE"`; Environment `frogbot` |
+| **M1 plant branch** `frogbot-risky-pr` | Adds **`jsonwebtoken@8.5.1`** + `/verify` route calling `jwt.verify` so High CVEs show as **Applicable** |
+| `.github/workflows/frogbot-scan-pr.yml` | PR gate; Environment `frogbot`; `JF_MIN_SEVERITY: Medium` |
 | `.github/workflows/frogbot-scan-repo.yml` | Repo scan + autofix; `JF_GIT_AGGREGATE_FIXES` / `JF_FIXABLE_ONLY` |
 | OIDC | `oidc-provider-name: github-oidc-integration` (must match Platform provider name) |
-| Variable | `JF_URL` = `https://tomjpd.jfrog.io` (Actions **variable**, not a secret) |
+| Variable | `JF_URL` = `https://tomjpd2.jfrog.io` (Actions **variable**, not a secret) |
+| Platform Watch | **`Frogbot-Watch`** on `github.com/tomjfrog/frogbot-v3.git` (+ org-level **`Source-Code-Watch`**) |
+| Platform policy | **`frogbot-demo-medium-and-above`** (Medium+; `fail_build` + **`fail_pull_request.active`**) |
+| GitHub protection | `main` requires status check **`scan-pull-request`** (strict, enforce admins) |
 
 ---
 
@@ -62,22 +69,34 @@ SE runs repo scan    ──►  frogbot-scan-repo.yml  (workflow_dispatch / push
 
 Do these once the morning of the demo. Aim for a clean stage.
 
-### Platform (`tomjpd`)
+### Platform (`tomjpd2`)
 
-- [ ] You can log into `https://tomjpd.jfrog.io`.
+- [ ] You can log into `https://tomjpd2.jfrog.io`.
 - [ ] OIDC provider name matches the workflow (`github-oidc-integration`).
 - [ ] JAS scanners available (Contextual Analysis, Secrets + dynamic validation; snippet if licensed).
 - [ ] Open **Application → Xray → Scans List → Git Repositories** and filter/search this repo so M4 is one click away.
-- [ ] **Watch / violations:** if repo scans hang on `Xray is processing your scan results...`, read [ISSUES.md](ISSUES.md). The temporary workaround detaches the git-repo Watch resource so autofix still works; policy-violation storytelling is limited until Xray indexing is healthy again.
+- [ ] Watches attached to this git repo still resolve (expect `Frogbot-Watch` via `/api/v1/xsc/watches/resource?git_repository=…`).
+- [ ] Policy **`frogbot-demo-medium-and-above`** still has **Fail Pull Request** enabled (UI: Policy → rule → Actions). Frogbot V3 will not fail the PR check without it.
+- [ ] Quick indexing health check (should reach `DONE`, not stuck `PENDING`):
+
+```bash
+jf xr curl -s -XPOST /api/v1/artifact/status \
+  -H "Content-Type: application/json" --server-id tomjpd2 \
+  -d '{"repo":"npm-remote-cache","path":"minimist/-/minimist-0.0.10.tgz"}'
+# Want overall.status == DONE
+```
+
+If indexing is stuck forever, see historical notes in [ISSUES.md](ISSUES.md) (`tomjpd`). That hang should **not** reproduce on healthy `tomjpd2`.
 
 ### GitHub
 
-- [ ] Actions variable `JF_URL` is set; **no** `JF_ACCESS_TOKEN` in secrets.
+- [ ] Actions variable `JF_URL` = `https://tomjpd2.jfrog.io`; **no** `JF_ACCESS_TOKEN` in secrets.
 - [ ] **Settings → Actions → General:** “Allow GitHub Actions to create and approve pull requests” is **on**.
+- [ ] **Settings → Branches:** `main` protection requires **`scan-pull-request`**.
 - [ ] Both workflows have `permissions.security-events: write` (Code Scanning) and `id-token: write` (OIDC).
-- [ ] Public repo: Environment **`frogbot`** still has a required reviewer for PR scans.
-- [ ] Close or merge leftover Frogbot autofix PRs and delete leftover `frogbot-*` branches so **M2** is dramatic.
-- [ ] Confirm last **Frogbot Scan Repository** run on `main` is green (~1 minute, not ~20 minutes).
+- [ ] Public repo: Environment **`frogbot`** still has a required reviewer for PR scans (approve when the job waits).
+- [ ] Close or merge leftover Frogbot autofix PRs and delete leftover `frogbot-*` branches so **M2** is dramatic — **except** keep / re-open the intentional **`frogbot-risky-pr`** demo PR for M1/M3 if you plan to reuse it.
+- [ ] Confirm last **Frogbot Scan Repository** run on `main` is green (~1–2 minutes).
 
 ### Optional smoke (5 minutes)
 
@@ -85,6 +104,7 @@ Do these once the morning of the demo. Aim for a clean stage.
 gh workflow run "Frogbot Scan Repository" --ref main
 gh run watch
 gh pr list --state open
+# Expect PR #13-style risky PR (or recreate from frogbot-risky-pr) to show scan-pull-request = failure + merge blocked
 ```
 
 ---
@@ -94,8 +114,8 @@ gh pr list --state open
 | # | Moment | Time | Primary UI |
 | --- | --- | --- | --- |
 | 1 | **M6** OIDC | ~30–60s | Workflow YAML + repo secrets/variables |
-| 2 | **M1** PR SCA gate | ~5–7 min | New PR you open by hand |
-| 3 | **M3** Contextual Analysis | ~2–3 min | Same PR comment / Platform detail |
+| 2 | **M1** PR SCA gate + merge block | ~5–7 min | `frogbot-risky-pr` PR (jsonwebtoken) |
+| 3 | **M3** Contextual Analysis | ~2–3 min | Same PR: Applicable Highs + not-applicable contrast |
 | 4 | **M2** Autofix | ~3–5 min | Actions → repo scan → Fix PR(s) |
 | 5 | **M4** Scans List + SBOM | ~3 min | JFrog Platform |
 | 6 | **M5** Snippet + secret | ~2–3 min | Same Platform commit (and/or Code Scanning) |
@@ -117,7 +137,7 @@ GitHub Code Scanning alerts are a nice “developer already lives here” aside 
 2. Call out:
    - `permissions.id-token: write`
    - `oidc-provider-name: github-oidc-integration`
-   - `JF_URL: ${{ vars.JF_URL }}` (variable, not secret)
+   - `JF_URL: ${{ vars.JF_URL }}` (variable, not secret) → `https://tomjpd2.jfrog.io`
    - `JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}` (GitHub API only)
 3. GitHub → **Settings → Secrets and variables → Actions**: show `JF_URL` under Variables; confirm **no** Platform access token secret.
 
@@ -130,51 +150,67 @@ GitHub Code Scanning alerts are a nice “developer already lives here” aside 
 
 ---
 
-### M1 — PR blocks a bad SCA change
+### M1 — PR blocks a bad SCA change (and blocks merge)
 
-**What you prove:** Frogbot comments on the PR with **new** findings (diff vs target) and **fails** the check so the change is visible in the PR status.
+**What you prove:** Frogbot comments on the PR with **new** findings (diff vs target), **fails** the `scan-pull-request` check, and GitHub **branch protection refuses merge** until the gate is green.
 
-**Important:** Workflows that Frogbot itself creates with `GITHUB_TOKEN` do **not** re-trigger `pull_request_target`. For M1 you must open a PR **yourself** (hand edit + `gh pr create` or the GitHub UI).
+**Important:** Workflows that Frogbot itself creates with `GITHUB_TOKEN` do **not** re-trigger `pull_request_target`. For M1 you must open (or reuse) a PR **yourself**.
 
-**Prep commands**
+#### Preferred plant (already integrated): `jsonwebtoken@8.5.1`
+
+Branch **`frogbot-risky-pr`** adds a High-severity package that is **not** on `main`, so the PR scan reports it as new:
+
+| Piece | Detail |
+| --- | --- |
+| Dependency | `jsonwebtoken@8.5.1` (fix: `9.0.0`) |
+| High CVEs | **CVE-2022-23540**, **CVE-2022-23539** (plus Medium CVE-2022-23541) |
+| Call site | `index.js` → `GET /verify` → `jwt.verify(token, process.env.JWT_SECRET)` without an `algorithms` option |
+
+**Reuse the open PR** (typical demo path):
+
+1. Open the existing PR from `frogbot-risky-pr` (e.g. [#13](https://github.com/tomjfrog/frogbot-v3/pull/13) or recreate if closed).
+2. If the Environment gate is waiting, approve **`frogbot`**.
+
+**Recreate from scratch if needed**
 
 ```bash
 git fetch origin && git checkout main && git pull
-git checkout -b demo/bump-vulnerable-dep
+git checkout -b frogbot-risky-pr
 
-# Option A — re-pin an already-vulnerable dep to a different vulnerable version
-# (forces a lockfile/package.json diff Frogbot will treat as “new” vs main as needed)
-# e.g. change lodash from 4.17.4 → 4.17.20 in package.json, then:
-jf npm-config --server-id-resolve=tomjpd --repo-resolve=npm-remote
+# Add to package.json dependencies:
+#   "jsonwebtoken": "8.5.1"
+# Add /verify route in index.js (jwt.verify with process.env.JWT_SECRET, no algorithms)
+
+jf npm-config --server-id-resolve=tomjpd2 --repo-resolve=npm-remote
 jf npm install
-# Confirm lockfile still points at tomjpd — never bare npm install on PTC laptops
+# Confirm lockfile URLs are tomjpd2.jfrog.io — never bare npm install on PTC laptops
 
-git add package.json package-lock.json
-git commit -m "demo: bump vulnerable lodash"
+git add package.json package-lock.json index.js
+git commit -m "demo: add risky jsonwebtoken"
 git push -u origin HEAD
-gh pr create --title "demo: bump vulnerable lodash" --body "Demo PR for Frogbot M1/M3"
+gh pr create --title "demo: risky jsonwebtoken" --body "Demo PR for Frogbot M1/M3"
 ```
-
-If the repo is public, approve the **`frogbot`** Environment gate when Actions prompts.
 
 **Show**
 
-1. PR → **Checks** / **Conversation**: Frogbot job runs (`Frogbot Scan Pull Request`).
-2. Frogbot **PR comment** with CVE / severity / component / fix version where available.
-3. Failed check (`JF_FAIL: "TRUE"` on the PR workflow).
+1. PR → **Checks**: job **`scan-pull-request`** (workflow *Frogbot Scan Pull Request*) runs and ends **red**.
+2. Frogbot **PR comment**: High CVEs on `jsonwebtoken@8.5.1`, Contextual Analysis **Applicable**, Watch names (`Frogbot-Watch` / `Source-Code-Watch`), fix version `9.0.0`.
+3. Action log includes: `Security violation with 'fail-pull-request' rule is found` (Frogbot V3 fail path).
+4. PR **Merge** button / merge status: **blocked** because `main` requires `scan-pull-request`.
 
 **Talking points**
 
-- PR scan is **diff-aware**: it highlights what *this* change introduced (or newly exposed), not a dump of the whole repo every time.
-- Developers stay in GitHub; security signal is on the PR they already review.
+- PR scan is **diff-aware**: only what *this* change introduced vs `main`.
+- **Policy + GitHub protection together** close the loop: Xray decides the violation is merge-blocking; GitHub enforces the failed check.
+- Call out that Frogbot V3 fails the job on the policy’s **Fail Pull Request** action (not on `JF_FAIL` alone when Watches drive violations mode).
 
-**Done when:** Comment is visible and the Frogbot check is red/failed on that PR.
+**Done when:** Comment is visible, `scan-pull-request` is failed, and merge is blocked.
 
 **Pitfalls**
 
 - Environment `frogbot` waiting on reviewer → approve so the job starts.
-- Lockfile regenerated with bare `npm` → wrong registry / PTC → bad SCA story. Always `jf npm`.
-- Opening a PR that doesn’t change dependencies may yield “no new issues” — make a deliberate vulnerable bump.
+- Lockfile regenerated with bare `npm` → wrong registry / PTC → bad SCA story. Always `jf npm` against **`tomjpd2`**.
+- Opening a PR that doesn’t change dependencies may yield “no new issues.”
 
 ---
 
@@ -184,23 +220,24 @@ If the repo is public, approve the **`frogbot`** Environment gate when Actions p
 
 **Where the contrast is planted**
 
-| Status | Packages | Why |
+| Status | Packages / CVEs | Why |
 | --- | --- | --- |
-| **Applicable** | `lodash`, `moment`, `handlebars` | Called on HTTP routes in `index.js` (`_.merge`, `_.template`, `moment(...)`, `Handlebars.compile`) |
+| **Applicable (M1 PR)** | `jsonwebtoken` CVE-2022-23540 / CVE-2022-23539 | `/verify` calls `jwt.verify` without an `algorithms` option |
+| **Applicable (on main)** | `lodash`, `moment`, `handlebars` | Called on HTTP routes in `index.js` |
 | **Not applicable** | `axios`, `minimist` | In `package.json` only — never `require`’d |
 
 **Show**
 
-1. On the **same PR** from M1: in the Frogbot comment or linked detail, find applicability / Contextual Analysis status.
-2. Or in Platform (after a repo scan): commit/PR scan detail → security issues → applicability column/badge.
-3. Optionally open `index.js` and point at the comment block that documents the contrast (lines ~10–13).
+1. On the **M1 PR**: in the Frogbot table, point at **Applicable** on the High jsonwebtoken CVEs.
+2. On a repo-scan / Platform view of `main`: show lodash/moment/handlebars applicable vs axios/minimist not applicable.
+3. Optionally open `index.js` on the PR branch and show the `/verify` call site.
 
 **Talking points**
 
 - “Fix what is reachable first” — reduces noise without pretending unused deps don’t exist.
 - Same scanners power IDE / Platform stories elsewhere in the JFrog pitch.
 
-**Done when:** Customer sees at least one applicable and one not-applicable (or equivalent) finding.
+**Done when:** Customer sees at least one **Applicable** High on the risky PR and understands the not-applicable contrast on `main`.
 
 ---
 
@@ -210,9 +247,9 @@ If the repo is public, approve the **`frogbot`** Environment gate when Actions p
 
 **Show**
 
-1. Close leftover Frogbot fix PRs / delete `frogbot-*` branches if any (otherwise Frogbot skips: “a fix branch already exists”).
+1. Close leftover Frogbot fix PRs / delete `frogbot-*` branches if any (otherwise Frogbot skips: “a fix branch already exists”). Keep `frogbot-risky-pr` if you still need M1.
 2. GitHub → **Actions** → **Frogbot Scan Repository** → **Run workflow** (branch `main`).
-3. Watch the run (~1 min when healthy). Log should finish with fix PR creation, not hang on `Xray is processing your scan results...`.
+3. Watch the run (~1–2 min when healthy). Log should pass “Xray is processing your scan results…” quickly, then create fix PRs — not hang ~20 minutes.
 4. Open the new Frogbot PR(s) under **Pull requests**.
 
 **CLI alternative**
@@ -227,7 +264,7 @@ gh pr list --author "app/github-actions"   # or filter by title "[🐸 Frogbot]"
 
 - Repo scan = debt already on `main`; PR scan = change under review.
 - `JF_FIXABLE_ONLY` keeps the autofix story on packages that have a fix version.
-- Spec wants **one aggregated** PR (`JF_GIT_AGGREGATE_FIXES` / `aggregateFixes`). If the Platform Config Profile wins and you get **one PR per package**, still sell the moment (“Frogbot opened fix PRs”) and note aggregation is configurable — see [ISSUES.md](ISSUES.md) on V3 config profiles vs local YAML.
+- Spec prefers **one aggregated** PR (`JF_GIT_AGGREGATE_FIXES`). If the Platform Config Profile wins and you get **one PR per package**, still sell the moment (“Frogbot opened fix PRs”) and note aggregation is configurable — see [ISSUES.md](ISSUES.md) on V3 config profiles vs local YAML.
 
 **Done when:** At least one Frogbot fix PR is open with a dependency bump.
 
@@ -235,7 +272,7 @@ gh pr list --author "app/github-actions"   # or filter by title "[🐸 Frogbot]"
 
 - `403 GitHub Actions is not permitted to create or approve pull requests` → enable the Actions setting in §3.
 - Orphaned `frogbot-*` branches without PRs → delete branches, re-run.
-- 20-minute hang after local scanners → [ISSUES.md](ISSUES.md) (Xray indexing / Watch workaround).
+- 20-minute hang after local scanners → [ISSUES.md](ISSUES.md) (historical `tomjpd` indexing stall; re-check artifact status on `tomjpd2` if it returns).
 
 ---
 
@@ -254,12 +291,12 @@ gh pr list --author "app/github-actions"   # or filter by title "[🐸 Frogbot]"
 
 - Same Platform surface customers already use for binaries/builds — Git is now first-class.
 - SBOM supports transitive visibility and inventory conversations without a separate tool.
+- On `tomjpd2`, SBOM uploads under the `frogbot` Artifactory repo reach `artifact/status` **DONE** (indexing healthy).
 
 **Done when:** Customer sees this repo’s commit with Security Issues and an SBOM/component list.
 
 **Pitfalls**
 
-- If Xray never indexes uploaded CDX artifacts, Scans List detail may be thin even though Frogbot’s local scan succeeded — [ISSUES.md](ISSUES.md).
 - Don’t demote Platform for GitHub Code Scanning; treat GitHub as secondary developer UI ([SPEC.md §8](SPEC.md#8-github-code-scanning--security-tab)).
 
 ---
@@ -304,7 +341,7 @@ After M2 or M5:
 2. Filter by tools Frogbot uploaded (Xray / SAST / Secrets as present).
 3. One sentence: “Same findings, where developers already look for Dependabot/CodeQL.”
 
-Requirements and recovery: [SPEC.md §8](SPEC.md#8-github-code-scanning--security-tab).
+Requirements and recovery: [SPEC.md §8](SPEC.md#8-github-code-scanning--security-tab) (`security-events: write` is already on both workflows).
 
 ---
 
@@ -312,22 +349,24 @@ Requirements and recovery: [SPEC.md §8](SPEC.md#8-github-code-scanning--securit
 
 Keep to one line each — do not demo unless asked:
 
-- **Platform Config Profiles** — central Frogbot policy inheritance for many repos.
+- **Platform Config Profiles** — central Frogbot policy inheritance for many repos (`System_Default_Profile` appears in Action logs).
 - **IDE scanning** — same engine closer to the keyboard.
-- **Curation / PTC** — why this lab’s lockfile must resolve through `tomjpd` (corporate PTC would poison SCA).
+- **Curation / PTC** — why this lab’s lockfile must resolve through **`tomjpd2`** (corporate PTC would poison SCA).
+- **Fail Pull Request policy action** — Platform policy is what makes Frogbot V3 fail the GitHub check in violations mode; branch protection is what blocks merge.
 
 ---
 
 ## 8. Reset between demos
 
 ```bash
-# Close demo + Frogbot PRs (adjust numbers)
+# Close Frogbot autofix PRs; keep or recreate the risky demo PR separately
 gh pr list --state open
-gh pr close <n> --comment "demo reset"
+gh pr close <n> --comment "demo reset"   # autofix PRs only
 
-# Delete leftover fix / demo branches
-gh api repos/<owner>/frogbot-v3/branches --jq '.[].name' | grep -E '^(frogbot-|demo/)' | while read b; do
-  gh api -X DELETE "repos/<owner>/frogbot-v3/git/refs/heads/$b"
+# Delete leftover fix / demo branches (preserve frogbot-risky-pr if reusing M1)
+gh api repos/tomjfrog/frogbot-v3/branches --jq '.[].name' | grep -E '^(frogbot-|demo/)' | while read b; do
+  [ "$b" = "frogbot-risky-pr" ] && continue
+  gh api -X DELETE "repos/tomjfrog/frogbot-v3/git/refs/heads/$b"
 done
 
 git checkout main && git pull
@@ -336,20 +375,24 @@ git checkout main && git pull
 
 Re-run a green **Frogbot Scan Repository** once if you want a fresh Scans List timestamp before the next customer.
 
+**M1 reset:** leave `frogbot-risky-pr` open (merge stays blocked — that’s the point), or close and re-push the plant branch before the next customer.
+
 ---
 
 ## 9. Troubleshooting cheat sheet
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Hang after `Xray is processing your scan results...` | Xray indexing / violations wait | [ISSUES.md](ISSUES.md) |
+| Hang after `Xray is processing your scan results...` | Xray indexing / violations wait | [ISSUES.md](ISSUES.md); confirm `artifact/status` → `DONE` on `tomjpd2` |
+| Frogbot finds issues but check stays **green** | Policy missing **Fail Pull Request** | Set `fail_pull_request: { "active": true }` on the security policy rule (UI or API object shape — boolean `true` is rejected) |
+| Check red but merge still allowed | Branch protection missing | Require status check **`scan-pull-request`** on `main` |
 | `403` on `code-scanning/sarifs` | Missing `security-events: write` | SPEC §8 |
 | `403` creating pull requests | Actions “create and approve PRs” off | SPEC §8 / §4.2 |
-| “fix branch already exists” | Orphaned `frogbot-*` branches | Delete branches, re-run |
+| “Fix branch already exists” | Orphaned `frogbot-*` branches | Delete branches, re-run |
 | PR scan never runs on Frogbot’s own PRs | `GITHUB_TOKEN` doesn’t re-trigger workflows | Open M1 PR by hand |
 | PR job stuck “Waiting for approval” | Environment `frogbot` | Approve deployment |
-| Weird / empty SCA | Lockfile via PTC / `npmjs` | Regenerate with `jf npm` on `tomjpd` |
-| YAML watch name ≠ Platform | V3 uses Config Profile + Platform watches | [ISSUES.md](ISSUES.md) §2 |
+| Weird / empty SCA | Lockfile via PTC / `npmjs` | Regenerate with `jf npm` on **`tomjpd2`** |
+| YAML watch name ≠ Platform | V3 uses Config Profile + Platform watches | [ISSUES.md](ISSUES.md) §2; live Watches are `Frogbot-Watch` / `Source-Code-Watch` |
 
 ---
 
@@ -358,8 +401,9 @@ Re-run a green **Frogbot Scan Repository** once if you want a fresh Scans List t
 | Resource | Path / URL |
 | --- | --- |
 | Spec (moments, checklist, docs) | [SPEC.md](SPEC.md) |
-| Platform / Watch issues | [ISSUES.md](ISSUES.md) |
+| Platform / Watch issues (historical `tomjpd`) | [ISSUES.md](ISSUES.md) |
 | Lab README | [README.md](README.md) |
-| Platform | https://tomjpd.jfrog.io |
+| Platform (current) | https://tomjpd2.jfrog.io |
+| Risky PR plant branch | `frogbot-risky-pr` (`jsonwebtoken@8.5.1`) |
 | Frogbot docs | https://docs.jfrog.com/security/docs/frogbot |
 | GitHub Actions integration | https://docs.jfrog.com/security/docs/github-actions |
