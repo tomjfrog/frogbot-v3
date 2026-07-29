@@ -37,11 +37,12 @@ app.get("/render", (req, res) => {
   res.send(template({ name: "world" }));
 });
 
-// DEMO PR plant: jsonwebtoken 8.5.1 — High (XRAY-412392 / XRAY-412375)
-// jwt.verify() without algorithms can default to "none" → signature bypass — APPLICABLE
+// DEMO PR plant: jsonwebtoken 8.5.1 — High (CVE-2022-23540 / CVE-2022-23539)
+// CA marks CVE-2022-23540 Applicable only when secret/key is falsy AND algorithms is omitted.
+// JWT_SECRET is unset in CI/demo → undefined (falsy). Do not set a truthy secret here.
 app.get("/verify", (req, res) => {
   try {
-    const payload = jwt.verify(req.query.token || "", "demo-secret");
+    const payload = jwt.verify(req.query.token || "", process.env.JWT_SECRET);
     res.json(payload);
   } catch (err) {
     res.status(401).json({ error: err.message });
